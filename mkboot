@@ -1,0 +1,87 @@
+#!/bin/bash
+
+if [[ `file -i $1` == "$1: application/octet-stream; charset=binary" ]]; then
+  rm -rf $2
+  mkdir -p $2
+  python `dirname "$0"`/unpack_bootimg.py \
+    --boot_img $1 \
+    --out $2 \
+    > $2/img_info.tmp
+
+  tr < $2/img_info.tmp -d '\000' > $2/img_info
+  rm -rf $2/img_info.tmp
+
+  gzip -t $2/ramdisk 2> /dev/null
+  [ $? -eq 0 ] && ramdisk_type="gzip"
+
+  lzma -t $2/ramdisk 2> /dev/null
+  [ $? -eq 0 ] && ramdisk_type="lzma"
+
+  xz -t   $2/ramdisk 2> /dev/null
+  [ $? -eq 0 ] && ramdisk_type="xz"
+
+  lzop -t $2/ramdisk 2> /dev/null
+  [ $? -eq 0 ] && ramdisk_type="lzop"
+
+  [ `file $2/ramdisk | awk '{print $2}'` == "LZ4" ] && ramdisk_type="lz4"
+
+  if [ ! -z $ramdisk_type ]; then
+    mkdir $2/ramdisk_extracted
+    cd $2/ramdisk_extracted
+
+    case $ramdisk_type in
+      gzip) gzip -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
+      lzma) lzma -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
+      xz)   xz   -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
+      lzop) lzop -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
+      lz4)  lz4  -d    ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
+    esac
+
+    cd ../..
+    echo "ramdisk type: $ramdisk_type" >> $2/img_info
+  fi
+
+elif [ -d $1 ]; then
+  rm -rf $2
+
+  ramdisk_type=`sed -n -e '/^ramdisk type: /p' $1/img_info | sed 's/^ramdisk type: //g'`
+  if [ ! -z $ramdisk_type ]; then
+    cd $1/ramdisk_extracted
+    case $ramdisk_type in
+      gzip) find . | cpio --create --format='newc' | gzip -n -f    > ../ramdisk ;;
+      lzma) find . | cpio --create --format='newc' | lzma -f -c    > ../ramdisk ;;
+      xz)   find . | cpio --create --format='newc' | xz -f -c      > ../ramdisk ;;
+      lzop) find . | cpio --create --format='newc' | lzop -n -f -9 > ../ramdisk ;;
+      lz4)  find . | cpio --create --format='newc' | lz4 -f -9     > ../ramdisk ;;
+    esac
+    cd ../../
+  fi
+
+  cmdline=`sed -n -e '/^command line args: /p' $1/img_info | sed 's/^command line args: //g'`
+  base="0x0"
+  kernel_offset=`sed -n -e '/^kernel load address: /p' $1/img_info | sed 's/^kernel load address: //g'`
+  ramdisk_offset=`sed -n -e '/^ramdisk load address: /p' $1/img_info | sed 's/^ramdisk load address: //g'`
+  second_offset=`sed -n -e '/^second bootloader load address: /p' $1/img_info | sed 's/^second bootloader load address: //g'`
+  dtb_offset=`sed -n -e '/^dtb address: /p' $1/img_info | sed 's/^dtb address: //g'`
+  tags_offset=`sed -n -e '/^kernel tags load address: /p' $1/img_info | sed 's/^kernel tags load address: //g'`
+  pagesize=`sed -n -e '/^page size: /p' $1/img_info | sed 's/^page size: //g'`
+  header_version=`sed -n -e '/^boot image header version: /p' $1/img_info | sed 's/^boot image header version: //g'`
+
+  python `dirname "$0"`/mkbootimg.py \
+    --kernel $1/kernel \
+    --ramdisk $1/ramdisk \
+    --dtb $1/dtb \
+    --cmdline "$cmdline" \
+    --base $base \
+    --kernel_offset $kernel_offset \
+    --ramdisk_offset $ramdisk_offset \
+    --second_offset $second_offset \
+    --dtb_offset $dtb_offset \
+    --tags_offset $tags_offset \
+    --pagesize $pagesize \
+    --header_version $header_version \
+    -o $2
+else
+  echo "Error. $1 is not a boot image file or a directory."
+  exit 1
+fi
