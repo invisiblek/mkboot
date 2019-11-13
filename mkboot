@@ -69,6 +69,7 @@ elif [ -d $1 ]; then
 
   [ -f $1/dtb ] && dtb_param="--dtb $1/dtb"
   [ ! -z $dtb_offset ] && dtb_offset_param="--dtb_offset $dtb_offset"
+  [ $header_version -gt 0 ] && header_version_param="--header_version $header_version"
 
   python `dirname "$0"`/mkbootimg.py \
     --kernel $1/kernel \
@@ -80,7 +81,7 @@ elif [ -d $1 ]; then
     --second_offset $second_offset \
     --tags_offset $tags_offset \
     --pagesize $pagesize \
-    --header_version $header_version \
+    $header_version_param \
     $dtb_param \
     $dtb_offset_param \
     -o $2
