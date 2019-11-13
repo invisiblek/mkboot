@@ -11,30 +11,32 @@ if [[ `file -i $1` == "$1: application/octet-stream; charset=binary" ]]; then
   tr < $2/img_info.tmp -d '\000' > $2/img_info
   rm -rf $2/img_info.tmp
 
-  gzip -t $2/ramdisk 2> /dev/null
+  mv $2/ramdisk $2/ramdisk.packed
+
+  gzip -t $2/ramdisk.packed 2> /dev/null
   [ $? -eq 0 ] && ramdisk_type="gzip"
 
-  lzma -t $2/ramdisk 2> /dev/null
+  lzma -t $2/ramdisk.packed 2> /dev/null
   [ $? -eq 0 ] && ramdisk_type="lzma"
 
-  xz -t   $2/ramdisk 2> /dev/null
+  xz -t   $2/ramdisk.packed 2> /dev/null
   [ $? -eq 0 ] && ramdisk_type="xz"
 
-  lzop -t $2/ramdisk 2> /dev/null
+  lzop -t $2/ramdisk.packed 2> /dev/null
   [ $? -eq 0 ] && ramdisk_type="lzop"
 
-  [ `file $2/ramdisk | awk '{print $2}'` == "LZ4" ] && ramdisk_type="lz4"
+  [ `file $2/ramdisk.packed | awk '{print $2}'` == "LZ4" ] && ramdisk_type="lz4"
 
   if [ ! -z $ramdisk_type ]; then
-    mkdir $2/ramdisk_extracted
-    cd $2/ramdisk_extracted
+    mkdir $2/ramdisk
+    cd $2/ramdisk
 
     case $ramdisk_type in
-      gzip) gzip -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
-      lzma) lzma -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
-      xz)   xz   -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
-      lzop) lzop -d -c ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
-      lz4)  lz4  -d    ../ramdisk | cpio -i -d -m --no-absolute-filenames ;;
+      gzip) gzip -d -c ../ramdisk.packed | cpio -i -d -m --no-absolute-filenames ;;
+      lzma) lzma -d -c ../ramdisk.packed | cpio -i -d -m --no-absolute-filenames ;;
+      xz)   xz   -d -c ../ramdisk.packed | cpio -i -d -m --no-absolute-filenames ;;
+      lzop) lzop -d -c ../ramdisk.packed | cpio -i -d -m --no-absolute-filenames ;;
+      lz4)  lz4  -d    ../ramdisk.packed | cpio -i -d -m --no-absolute-filenames ;;
     esac
 
     cd ../..
@@ -46,13 +48,13 @@ elif [ -d $1 ]; then
 
   ramdisk_type=`sed -n -e '/^ramdisk type: /p' $1/img_info | sed 's/^ramdisk type: //g'`
   if [ ! -z $ramdisk_type ]; then
-    cd $1/ramdisk_extracted
+    cd $1/ramdisk
     case $ramdisk_type in
-      gzip) find . | cpio --create --format='newc' | gzip -n -f    > ../ramdisk ;;
-      lzma) find . | cpio --create --format='newc' | lzma -f -c    > ../ramdisk ;;
-      xz)   find . | cpio --create --format='newc' | xz -f -c      > ../ramdisk ;;
-      lzop) find . | cpio --create --format='newc' | lzop -n -f -9 > ../ramdisk ;;
-      lz4)  find . | cpio --create --format='newc' | lz4 -f -9     > ../ramdisk ;;
+      gzip) find . | cpio --create --format='newc' | gzip -n -f    > ../ramdisk.packed ;;
+      lzma) find . | cpio --create --format='newc' | lzma -f -c    > ../ramdisk.packed ;;
+      xz)   find . | cpio --create --format='newc' | xz -f -c      > ../ramdisk.packed ;;
+      lzop) find . | cpio --create --format='newc' | lzop -n -f -9 > ../ramdisk.packed ;;
+      lz4)  find . | cpio --create --format='newc' | lz4 -f -9     > ../ramdisk.packed ;;
     esac
     cd ../../
   fi
@@ -73,7 +75,7 @@ elif [ -d $1 ]; then
 
   python `dirname "$0"`/mkbootimg.py \
     --kernel $1/kernel \
-    --ramdisk $1/ramdisk \
+    --ramdisk $1/ramdisk.packed \
     --cmdline "$cmdline" \
     --base $base \
     --kernel_offset $kernel_offset \
