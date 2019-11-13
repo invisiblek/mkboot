@@ -67,19 +67,22 @@ elif [ -d $1 ]; then
   pagesize=`sed -n -e '/^page size: /p' $1/img_info | sed 's/^page size: //g'`
   header_version=`sed -n -e '/^boot image header version: /p' $1/img_info | sed 's/^boot image header version: //g'`
 
+  [ -f $1/dtb ] && dtb_param="--dtb $1/dtb"
+  [ ! -z $dtb_offset ] && dtb_offset_param="--dtb_offset $dtb_offset"
+
   python `dirname "$0"`/mkbootimg.py \
     --kernel $1/kernel \
     --ramdisk $1/ramdisk \
-    --dtb $1/dtb \
     --cmdline "$cmdline" \
     --base $base \
     --kernel_offset $kernel_offset \
     --ramdisk_offset $ramdisk_offset \
     --second_offset $second_offset \
-    --dtb_offset $dtb_offset \
     --tags_offset $tags_offset \
     --pagesize $pagesize \
     --header_version $header_version \
+    $dtb_param \
+    $dtb_offset_param \
     -o $2
 else
   echo "Error. $1 is not a boot image file or a directory."
